@@ -3,11 +3,11 @@ kind: Ingress
 metadata:
   name: shopping-list-api
   annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
+    cert-manager.io/cluster-issuer: letsencrypt-prod
 spec:
-  ingressClassName: nginx
   rules:
-    - http:
+    - host: easyshopping.duckdns.org
+      http:
         paths:
           - path: /
             pathType: Prefix
@@ -16,3 +16,7 @@ spec:
                 name: shopping-list-api
                 port:
                   number: 8080
+  tls:
+    - hosts:
+        - easyshopping.duckdns.org
+      secretName: shopping-list-tls

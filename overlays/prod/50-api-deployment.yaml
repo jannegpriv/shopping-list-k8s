@@ -3,11 +3,38 @@ kind: Deployment
 metadata:
   name: shopping-list-api
 spec:
-  replicas: 3  # Increased replicas for production
+  replicas: 3  # Higher availability for production
+  selector:
+    matchLabels:
+      app: shopping-list-api
   template:
+    metadata:
+      labels:
+        app: shopping-list-api
     spec:
       containers:
         - name: api
+          image: ghcr.io/jannegpriv/shopping-list-api:main
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DB_HOST
+              value: mysql
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: api-secret
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: api-secret
+                  key: DB_PASSWORD
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: api-secret
+                  key: DB_NAME
           resources:
             requests:
               memory: "256Mi"
@@ -15,3 +42,15 @@ spec:
             limits:
               memory: "512Mi"
               cpu: "400m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10

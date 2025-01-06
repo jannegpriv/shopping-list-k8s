@@ -2,50 +2,126 @@
 
 This repository contains the Kubernetes configuration for the Shopping List API application.
 
+## HTTPS and Certificate Management
+
+The application uses Let's Encrypt for SSL/TLS certification through cert-manager. The setup includes:
+
+- Automatic TLS certificate provisioning
+- HTTP to HTTPS redirection
+- Automatic certificate renewal
+
+### Prerequisites for HTTPS
+
+1. cert-manager installed in the cluster
+2. A ClusterIssuer named `letsencrypt-prod` configured
+3. DNS configured for your domain (e.g., DuckDNS)
+
+### Certificate Status
+
+To check the certificate status:
+```bash
+kubectl get certificate -n shopping-list-dev
+kubectl describe certificate shopping-list-tls -n shopping-list-dev
+```
+
+To check the challenge status during certificate issuance:
+```bash
+kubectl get challenges -n shopping-list-dev
+```
+
+If you need to force certificate renewal:
+```bash
+kubectl delete certificate shopping-list-tls -n shopping-list-dev
+```
+
 ## Secrets Management
 
-This repository uses Sealed Secrets for managing sensitive information. The sealed secrets are encrypted using the public key from your cluster's sealed-secrets controller and can only be decrypted by the controller.
+This repository uses Sealed Secrets for managing sensitive information in both development and production environments. The sealed secrets are encrypted using the public key from your cluster's sealed-secrets controller and can only be decrypted by the controller.
 
-### Creating New Sealed Secrets
+### Creating Sealed Secrets
 
-To create a new sealed secret:
+To create a sealed secret:
 
-1. Create a regular secret YAML file:
+1. First, create a regular secret manifest:
 ```yaml
 apiVersion: v1
 kind: Secret
 metadata:
   name: my-secret
-  namespace: my-namespace
+  namespace: shopping-list-dev  # or shopping-list-prod
 type: Opaque
 stringData:
-  key1: value1
-  key2: value2
+  key: value
 ```
 
 2. Use kubeseal to encrypt it:
 ```bash
-kubeseal --format yaml < my-secret.yaml > sealed-secret.yaml
+# For development
+kubectl create secret generic my-secret \
+  --namespace shopping-list-dev \
+  --from-literal=key=value \
+  --dry-run=client -o yaml | \
+kubeseal --format yaml --scope strict \
+  --controller-namespace kube-system \
+  --controller-name sealed-secrets \
+  > overlays/dev/my-sealed-secret.yaml
+
+# For production
+kubectl create secret generic my-secret \
+  --namespace shopping-list-prod \
+  --from-literal=key=value \
+  --dry-run=client -o yaml | \
+kubeseal --format yaml --scope strict \
+  --controller-namespace kube-system \
+  --controller-name sealed-secrets \
+  > overlays/prod/my-sealed-secret.yaml
 ```
 
-3. Apply the sealed secret to your cluster:
+3. Add the sealed secret to your kustomization.yaml:
+```yaml
+resources:
+  - my-sealed-secret.yaml
+```
+
+### Updating Sealed Secrets
+
+To update a sealed secret:
+
+1. Delete the existing secret from the cluster:
 ```bash
-kubectl apply -f sealed-secret.yaml
+kubectl delete secret my-secret -n shopping-list-dev  # or shopping-list-prod
 ```
 
-The sealed-secrets controller will automatically decrypt the secret and create a regular Kubernetes secret.
+2. Create and apply a new sealed secret following the steps above.
 
-### Updating Secrets
+### Directory Structure
 
-To update a secret:
-1. Create a new regular secret YAML with the updated values
-2. Seal it using kubeseal
-3. Replace the old sealed secret with the new one
-4. The controller will automatically update the Kubernetes secret
+The repository contains separate sealed secrets for development and production environments:
 
-### Development vs Production
-
-The repository contains separate sealed secrets for development and production environments in their respective overlay directories. Each environment's secrets are encrypted specifically for that environment's namespace.
+```
+.
+├── base/               # Base configurations
+│   ├── 30-mysql-pvc.yaml         # MySQL PVC
+│   ├── 40-mysql-deployment.yaml  # MySQL deployment
+│   ├── 41-mysql-service.yaml     # MySQL service
+│   ├── 50-api-deployment.yaml    # API deployment
+│   ├── 51-api-service.yaml       # API service
+│   ├── 60-api-ingress.yaml      # API ingress (with TLS config)
+│   └── kustomization.yaml
+└── overlays/          # Environment-specific configurations
+    ├── dev/          # Development environment
+    │   ├── kustomization.yaml
+    │   ├── namespace.yaml
+    │   ├── 20-mysql-sealed-secret.yaml
+    │   ├── 21-api-sealed-secret.yaml
+    │   └── 60-api-ingress.yaml    # Dev-specific ingress with TLS
+    └── prod/         # Production environment
+        ├── kustomization.yaml
+        ├── namespace.yaml
+        ├── 20-mysql-sealed-secret.yaml
+        ├── 21-api-sealed-secret.yaml
+        └── 60-api-ingress.yaml    # Prod-specific ingress with TLS
+```
 
 ## Structure
 
@@ -53,24 +129,25 @@ The repository contains separate sealed secrets for development and production e
 .
 ├── base/                   # Base Kubernetes manifests
 │   ├── 10-namespace.yaml           # Namespace definition
-│   ├── 20-mysql-secret.yaml        # MySQL secrets
-│   ├── 21-api-secret.yaml          # API secrets
 │   ├── 30-mysql-pvc.yaml          # MySQL persistent volume claim
 │   ├── 40-mysql-deployment.yaml    # MySQL deployment
 │   ├── 41-mysql-service.yaml       # MySQL service
 │   ├── 50-api-deployment.yaml      # API deployment
 │   ├── 51-api-service.yaml         # API service
-│   ├── 60-api-ingress.yaml        # API ingress
+│   ├── 60-api-ingress.yaml        # API ingress (with TLS config)
 │   └── kustomization.yaml
 └── overlays/              # Environment-specific configurations
     ├── dev/              # Development environment
     │   ├── kustomization.yaml
-    │   ├── 20-mysql-secret.yaml
-    │   └── 21-api-secret.yaml
+    │   ├── namespace.yaml
+    │   ├── 20-mysql-sealed-secret.yaml
+    │   ├── 21-api-sealed-secret.yaml
+    │   └── 60-api-ingress.yaml    # Dev-specific ingress with TLS
     └── prod/             # Production environment
         ├── kustomization.yaml
-        ├── 20-mysql-secret.yaml
-        ├── 21-api-secret.yaml
+        ├── namespace.yaml
+        ├── 20-mysql-sealed-secret.yaml
+        ├── 21-api-sealed-secret.yaml
         └── 50-api-deployment.yaml
 ```
 
@@ -94,6 +171,7 @@ This ordering ensures that dependencies are created in the correct order (e.g., 
 - Kubernetes cluster
 - kubectl installed and configured
 - kustomize installed (or kubectl version >= 1.14)
+- cert-manager installed for HTTPS support
 
 ### Deploying to Development
 
@@ -130,7 +208,13 @@ images:
 
 ## Monitoring
 
-The application exposes a `/health` endpoint for kubernetes probes.
+The application exposes the following endpoints:
+- `/health` - Health check endpoint for kubernetes probes
+- HTTPS endpoints (with valid TLS certificate):
+  - GET `/items` - List all items
+  - POST `/items` - Create a new item
+  - PUT `/items/{id}` - Update an item
+  - DELETE `/items/{id}` - Delete an item
 
 ## Resources
 

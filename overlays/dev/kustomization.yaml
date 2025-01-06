@@ -5,15 +5,16 @@ namespace: shopping-list-dev
 
 resources:
   - ../../base
+  - namespace.yaml
+  - 20-mysql-sealed-secret.yaml
+  - 21-api-sealed-secret.yaml
 
 patches:
-  - path: 20-mysql-secret.yaml
-  - path: 21-api-secret.yaml
+  - path: 60-api-ingress.yaml
 
 images:
-  - name: shopping-list-api
-    newName: your-registry/shopping-list-api
-    newTag: dev
+  - name: ghcr.io/jannegpriv/shopping-list-api
+    newTag: main
 
 commonLabels:
   environment: dev
