@@ -1,0 +1,17 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shopping-list-api
+spec:
+  replicas: 3  # Increased replicas for production
+  template:
+    spec:
+      containers:
+        - name: api
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+            limits:
+              memory: "512Mi"
+              cpu: "400m"

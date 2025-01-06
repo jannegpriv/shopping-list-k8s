@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: shopping-list-prod
+
+resources:
+  - ../../base
+
+patches:
+  - path: 20-mysql-secret.yaml
+  - path: 21-api-secret.yaml
+  - path: 50-api-deployment.yaml
+
+images:
+  - name: shopping-list-api
+    newName: your-registry/shopping-list-api
+    newTag: prod
+
+commonLabels:
+  environment: prod
