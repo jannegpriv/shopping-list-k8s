@@ -94,61 +94,54 @@ kubectl delete secret my-secret -n shopping-list-dev  # or shopping-list-prod
 
 2. Create and apply a new sealed secret following the steps above.
 
-### Directory Structure
-
-The repository contains separate sealed secrets for development and production environments:
+## Repository Structure
 
 ```
 .
-├── base/               # Base configurations
-│   ├── 30-mysql-pvc.yaml         # MySQL PVC
-│   ├── 40-mysql-deployment.yaml  # MySQL deployment
-│   ├── 41-mysql-service.yaml     # MySQL service
-│   ├── 50-api-deployment.yaml    # API deployment
-│   ├── 51-api-service.yaml       # API service
-│   ├── 60-api-ingress.yaml      # API ingress (with TLS config)
-│   └── kustomization.yaml
-└── overlays/          # Environment-specific configurations
-    ├── dev/          # Development environment
+├── base/                  # Base Kubernetes configurations
+│   ├── kustomization.yaml
+│   ├── 10-namespace.yaml
+│   ├── 20-mysql-secret.yaml
+│   ├── 21-api-secret.yaml
+│   ├── 30-mysql-pvc.yaml
+│   ├── 40-mysql-deployment.yaml
+│   ├── 41-mysql-service.yaml
+│   ├── 50-api-deployment.yaml
+│   ├── 51-api-service.yaml
+│   └── 60-api-ingress.yaml
+└── overlays/             # Environment-specific configurations
+    ├── dev/             # Development environment
     │   ├── kustomization.yaml
     │   ├── namespace.yaml
-    │   ├── 20-mysql-sealed-secret.yaml
-    │   ├── 21-api-sealed-secret.yaml
-    │   └── 60-api-ingress.yaml    # Dev-specific ingress with TLS
-    └── prod/         # Production environment
+    │   └── sealed-secrets/
+    └── prod/            # Production environment
         ├── kustomization.yaml
         ├── namespace.yaml
-        ├── 20-mysql-sealed-secret.yaml
-        ├── 21-api-sealed-secret.yaml
-        └── 60-api-ingress.yaml    # Prod-specific ingress with TLS
+        └── sealed-secrets/
 ```
 
-## Structure
+## Application Architecture
 
-```
-.
-├── base/                   # Base Kubernetes manifests
-│   ├── 10-namespace.yaml           # Namespace definition
-│   ├── 30-mysql-pvc.yaml          # MySQL persistent volume claim
-│   ├── 40-mysql-deployment.yaml    # MySQL deployment
-│   ├── 41-mysql-service.yaml       # MySQL service
-│   ├── 50-api-deployment.yaml      # API deployment
-│   ├── 51-api-service.yaml         # API service
-│   ├── 60-api-ingress.yaml        # API ingress (with TLS config)
-│   └── kustomization.yaml
-└── overlays/              # Environment-specific configurations
-    ├── dev/              # Development environment
-    │   ├── kustomization.yaml
-    │   ├── namespace.yaml
-    │   ├── 20-mysql-sealed-secret.yaml
-    │   ├── 21-api-sealed-secret.yaml
-    │   └── 60-api-ingress.yaml    # Dev-specific ingress with TLS
-    └── prod/             # Production environment
-        ├── kustomization.yaml
-        ├── namespace.yaml
-        ├── 20-mysql-sealed-secret.yaml
-        ├── 21-api-sealed-secret.yaml
-        └── 50-api-deployment.yaml
+```mermaid
+graph TD
+    subgraph "Kubernetes Cluster"
+        A[Ingress] --> |HTTPS| B[Shopping List API]
+        B --> C[(MySQL Database)]
+        
+        subgraph "cert-manager"
+            D[Certificate] --> A
+            E[ClusterIssuer] --> D
+        end
+        
+        subgraph "Sealed Secrets"
+            F[Sealed Secrets Controller] --> G[Decrypted Secrets]
+            G --> B
+            G --> C
+        end
+    end
+    
+    H[Let's Encrypt] --> E
+    I[External Users] --> |HTTPS| A
 ```
 
 ## File Ordering
